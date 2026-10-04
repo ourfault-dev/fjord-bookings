@@ -1,0 +1,4 @@
+{
+  "app": "dotnet run --project FjordBookings.Infra/FjordBookings.Infra.csproj",
+  "output": "cdk.out"
+}

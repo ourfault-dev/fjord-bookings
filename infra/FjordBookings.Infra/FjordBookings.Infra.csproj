@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>FjordBookings.Infra</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Amazon.CDK.Lib" />
+    <PackageReference Include="Constructs" />
+  </ItemGroup>
+
+</Project>

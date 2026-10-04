@@ -1,0 +1,25 @@
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+
+# Publish output the CDK app deploys
+out/
+
+# CDK
+cdk.out/
+cdk.context.json
+
+# Node
+node_modules/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store

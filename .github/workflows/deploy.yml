@@ -1,0 +1,188 @@
+name: Deploy
+
+# Tests, publishes and deploys Fjord Bookings to https://demo.ourfault.dev on every push to main. The certificate and
+# the DNS records are handled here, through the AWS CLI and the Cloudflare API, so the first run needs nothing done by
+# hand beyond the environment's secrets.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+env:
+  DOMAIN: demo.ourfault.dev
+  ZONE: ourfault.dev
+  STACK: fjord-bookings
+  TOKEN_SECRET: demo/ourfault-token
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-24.04-arm
+    # AWS_DEPLOY_ARN is a variable of the demo environment holding the role the workflow assumes through OIDC.
+    environment: demo
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Check the environment
+        env:
+          AWS_DEPLOY_ARN: ${{ vars.AWS_DEPLOY_ARN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          OURFAULT_TOKEN: ${{ secrets.OURFAULT_TOKEN }}
+        run: |
+          FAILED=0
+          if [ -z "$AWS_DEPLOY_ARN" ]; then
+            echo "::error::The demo environment has no AWS_DEPLOY_ARN variable: the deploy role's ARN."
+            FAILED=1
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::The demo environment has no CLOUDFLARE_API_TOKEN secret: a Cloudflare token with Zone:DNS:Edit on $ZONE."
+            FAILED=1
+          fi
+          if [ -z "$OURFAULT_TOKEN" ]; then
+            echo "::error::The demo environment has no OURFAULT_TOKEN secret: the ingest token of the Fjord Bookings workspace."
+            FAILED=1
+          fi
+          exit "$FAILED"
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Run tests
+        run: dotnet test
+
+      - name: Publish the site
+        # Framework-dependent for the managed dotnet10 runtime. The .pdb stays beside the assembly so stack traces
+        # carry file names and line numbers.
+        run: dotnet publish src/FjordBookings --runtime linux-arm64 --self-contained false --configuration Release --output out/fjord-bookings
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ARN }}
+          aws-region: eu-north-1
+
+      - name: Set up Node
+        # The CDK CLI runs on Node; the app itself is C#.
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install CDK CLI
+        run: |
+          npm install -g aws-cdk@2
+          echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
+          "$(npm prefix -g)/bin/cdk" --version
+
+      - name: Store the ingest token
+        # Creates the secret the site reads at start-up, or writes a new version when the value changed.
+        env:
+          OURFAULT_TOKEN: ${{ secrets.OURFAULT_TOKEN }}
+        run: |
+          VALUE="$(printf '%s' "$OURFAULT_TOKEN" | tr -d '[:space:]')"
+          if ERROR="$(aws secretsmanager describe-secret --secret-id "$TOKEN_SECRET" 2>&1 >/dev/null)"; then
+            CURRENT="$(aws secretsmanager get-secret-value --secret-id "$TOKEN_SECRET" --query SecretString --output text 2>/dev/null || true)"
+            if [ "$CURRENT" = "$VALUE" ]; then
+              echo "$TOKEN_SECRET unchanged"
+            else
+              aws secretsmanager put-secret-value --secret-id "$TOKEN_SECRET" --secret-string "$VALUE" >/dev/null
+              echo "$TOKEN_SECRET updated"
+            fi
+          elif echo "$ERROR" | grep -q ResourceNotFoundException; then
+            aws secretsmanager create-secret --name "$TOKEN_SECRET" --description "ourfault ingest token for fjord-bookings" \
+              --secret-string "$VALUE" >/dev/null
+            echo "$TOKEN_SECRET created"
+          else
+            echo "::error::$TOKEN_SECRET could not be read: $ERROR"
+            exit 1
+          fi
+
+      - name: Certificate
+        # CloudFront takes certificates from us-east-1. An issued or pending certificate for the domain is reused,
+        # else one is requested. Its validation record is written to Cloudflare every run, which also keeps ACM's
+        # renewal working, and the step waits until the certificate is issued.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          CERT="$(aws acm list-certificates --region us-east-1 --certificate-statuses ISSUED PENDING_VALIDATION \
+            --query "sort_by(CertificateSummaryList[?DomainName=='$DOMAIN'], &Status)[0].CertificateArn" --output text)"
+          if [ -z "$CERT" ] || [ "$CERT" = "None" ]; then
+            CERT="$(aws acm request-certificate --region us-east-1 --domain-name "$DOMAIN" --validation-method DNS \
+              --idempotency-token fjordbookings --tags Key=project,Value=fjord-bookings --query CertificateArn --output text)"
+            echo "Requested $CERT"
+          else
+            echo "Using $CERT"
+          fi
+          RECORD=""
+          for _ in $(seq 1 24); do
+            RECORD="$(aws acm describe-certificate --region us-east-1 --certificate-arn "$CERT" \
+              --query 'Certificate.DomainValidationOptions[0].ResourceRecord.[Name,Value]' --output text)"
+            case "$RECORD" in _*) break ;; esac
+            echo "Waiting for ACM to name the validation record."
+            sleep 5
+          done
+          case "$RECORD" in
+            _*) ;;
+            *) echo "::error::ACM named no validation record for $CERT."; exit 1 ;;
+          esac
+          read -r NAME VALUE <<<"$RECORD"
+          .github/scripts/cloudflare-cname.sh "$NAME" "$VALUE"
+          echo "Waiting for $CERT to be issued."
+          aws acm wait certificate-validated --region us-east-1 --certificate-arn "$CERT"
+          echo "CERTIFICATE_ARN=$CERT" >> "$GITHUB_ENV"
+
+      - name: Deploy stack
+        working-directory: infra
+        run: cdk deploy "$STACK" --require-approval never --ci -c certificateArn="$CERTIFICATE_ARN" -c commitSha="$GITHUB_SHA"
+
+      - name: Point the domain at CloudFront
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          TARGET="$(aws cloudformation describe-stacks --stack-name "$STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue | [0]" --output text)"
+          case "$TARGET" in
+            *.cloudfront.net) ;;
+            *) echo "::error::The $STACK stack has no DistributionDomainName output."; exit 1 ;;
+          esac
+          .github/scripts/cloudflare-cname.sh "$DOMAIN" "$TARGET"
+
+      - name: Smoke test
+        # The landing page and the health check answer 200, and a valid booking answers the 500 page, which sends one
+        # exception to ourfault for this commit. A new name can take a few minutes to resolve.
+        run: |
+          STATUS=""
+          for _ in $(seq 1 30); do
+            STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/" || true)"
+            [ "$STATUS" = 200 ] && break
+            echo "https://$DOMAIN/ answered '$STATUS'; retrying."
+            sleep 10
+          done
+          FAILED=0
+          check() {
+            if [ "$2" = "$3" ]; then echo "$1: $2"; else echo "::error::$1 answered $2, expected $3."; FAILED=1; fi
+          }
+          check "GET /" "$STATUS" 200
+          check "GET /healthz" "$(curl -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/healthz")" 200
+          BODY="$(mktemp)"
+          SUBMIT="$(curl -sS -o "$BODY" -w '%{http_code}' -X POST "https://$DOMAIN/book" \
+            --data-urlencode trip=GEIRANGER --data-urlencode "date=$(date -u -d '+30 days' +%F)" \
+            --data-urlencode passengers=2 --data-urlencode "name=Smoke Test" --data-urlencode email=smoke@example.com)"
+          check "POST /book" "$SUBMIT" 500
+          if ! grep -q "Something went wrong" "$BODY"; then
+            echo "::error::POST /book did not answer the error page."
+            FAILED=1
+          fi
+          exit "$FAILED"
