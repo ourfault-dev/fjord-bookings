@@ -241,3 +241,19 @@ form .button { justify-self: start; padding: 0.85rem 1.8rem; }
   form .row { grid-template-columns: 1fr; }
   .masthead nav a:first-child { display: none; }
 }
+
+.newsletter { display: grid; gap: 0.7rem; max-width: 460px; margin-top: 1.5rem; }
+.newsletter-title { margin: 0; color: var(--ink, inherit); font-weight: 600; }
+.newsletter .topics, .newsletter .subscribe { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.newsletter .topics button {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.newsletter .topics button[aria-pressed="true"] { border-color: var(--sea); color: var(--sea); }
+.newsletter input { flex: 1 1 12rem; padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.availability { margin-top: 1rem; }

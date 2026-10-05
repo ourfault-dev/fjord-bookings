@@ -22,6 +22,16 @@ gh secret set CLOUDFLARE_API_TOKEN --env demo --repo ourfault-dev/fjord-bookings
 
 The Cloudflare token can be the product's or a new one with `Zone:DNS:Edit` on the `ourfault.dev` zone. The workflow writes two records there: the certificate's `_….demo.ourfault.dev` validation CNAME and the `demo.ourfault.dev` CNAME, both DNS-only.
 
+## 2b. The browser key
+
+For the front-end faults (README, "Demonstrating"). On the workspace's **Setup** page, under **Your site**, create a key with service `fjord-bookings-web` and origin `https://demo.ourfault.dev`, and copy the key (`pk_…`). It is public, so it is a plain variable, not a secret:
+
+```bash
+gh variable set OURFAULT_BROWSER_KEY --env demo --repo ourfault-dev/fjord-bookings --body pk_…
+```
+
+Then re-run Deploy (step 4). Without the variable the deploy works and the pages go without the browser script.
+
 ## 3. The GitHub App's repository access
 
 On 2026-10-04 the App installations on `ourfault-dev` (`ourfault-dev` and `ourfault-dev-dev`) were on **All repositories**, so the App sees `fjord-bookings` and there is nothing to do. If an installation is moved to selected repositories: GitHub, `ourfault-dev` organisation, **Settings**, **GitHub Apps**, the App, **Configure**, **Repository access**, add `fjord-bookings`, **Save**. Without access ourfault can triage the failures but cannot read the code or file the issue.
@@ -47,3 +57,4 @@ The first run requests the certificate and waits for ACM to issue it, a few minu
 2. In the workspace, open **Services and repositories**. `fjord-bookings` is suggested or listed under Unmapped: **Confirm** or **Map** it to `ourfault-dev/fjord-bookings`.
 3. Submit a booking again. ourfault files an issue in `ourfault-dev/fjord-bookings` naming `SeasonalRates.MultiplierFor` in `src/FjordBookings/Pricing/SeasonalRates.cs`.
 4. For a fresh failure, open https://demo.ourfault.dev/book?variant=2 or `?variant=3` and submit: an `InvalidOperationException` in `DepartureSchedule` or an `ArgumentOutOfRangeException` in `FleetAllocation`, each its own fingerprint (README, "Demonstrating").
+5. For a front-end error, open https://demo.ourfault.dev, choose a topic in the footer's **Keep me posted** form, enter an address and choose **Keep me posted**: a `TypeError` from `newsletter.<hash>.js`. `https://demo.ourfault.dev/?variant=js2` has a **Check availability** button with a second one. Map `fjord-bookings-web` to `ourfault-dev/fjord-bookings` the way step 5.2 does for `fjord-bookings`.

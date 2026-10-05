@@ -36,8 +36,12 @@ jobs:
           AWS_DEPLOY_ARN: ${{ vars.AWS_DEPLOY_ARN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           OURFAULT_TOKEN: ${{ secrets.OURFAULT_TOKEN }}
+          OURFAULT_BROWSER_KEY: ${{ vars.OURFAULT_BROWSER_KEY }}
         run: |
           FAILED=0
+          if [ -z "$OURFAULT_BROWSER_KEY" ]; then
+            echo "::notice::The demo environment has no OURFAULT_BROWSER_KEY variable: the pages go without ourfault's browser script, so front-end errors are not reported."
+          fi
           if [ -z "$AWS_DEPLOY_ARN" ]; then
             echo "::error::The demo environment has no AWS_DEPLOY_ARN variable: the deploy role's ARN."
             FAILED=1
@@ -60,8 +64,22 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Set up Node
+        # Playwright and the CDK CLI run on Node; the app itself is C#.
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
       - name: Run tests
         run: dotnet test
+
+      - name: Run the browser tests
+        # Opens the site locally in Chromium against a fake ingest and checks that a front-end error reaches it.
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
 
       - name: Publish the site
         # Framework-dependent for the managed dotnet10 runtime. The .pdb stays beside the assembly so stack traces
@@ -73,12 +91,6 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ARN }}
           aws-region: eu-north-1
-
-      - name: Set up Node
-        # The CDK CLI runs on Node; the app itself is C#.
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
 
       - name: Install CDK CLI
         run: |
@@ -144,8 +156,11 @@ jobs:
           echo "CERTIFICATE_ARN=$CERT" >> "$GITHUB_ENV"
 
       - name: Deploy stack
+        # The browser key is public, so it is a plain variable; without it the pages carry no browser script.
+        env:
+          OURFAULT_BROWSER_KEY: ${{ vars.OURFAULT_BROWSER_KEY }}
         working-directory: infra
-        run: cdk deploy "$STACK" --require-approval never --ci -c certificateArn="$CERTIFICATE_ARN" -c commitSha="$GITHUB_SHA"
+        run: cdk deploy "$STACK" --require-approval never --ci -c certificateArn="$CERTIFICATE_ARN" -c commitSha="$GITHUB_SHA" -c browserKey="$OURFAULT_BROWSER_KEY"
 
       - name: Point the domain at CloudFront
         env:

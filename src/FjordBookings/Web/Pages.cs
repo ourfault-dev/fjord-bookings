@@ -14,7 +14,9 @@ public static class Pages
     public static string Hours(TimeSpan duration) =>
         duration.Minutes == 0 ? $"{duration.Hours} h" : $"{duration.Hours} h {duration.Minutes} min";
 
-    public static string Home(TripCatalogue trips)
+    /// <param name="trips">The trips to list.</param>
+    /// <param name="availabilityScript">The availability module's path, given with <c>?variant=js2</c>, which adds the "Check availability" button.</param>
+    public static string Home(TripCatalogue trips, string? availabilityScript = null)
     {
         var cards = new StringBuilder();
         foreach (var trip in trips.All)
@@ -33,12 +35,22 @@ public static class Pages
                 </article>
                 """);
         }
+        var availability = availabilityScript is null
+            ? ""
+            : $$"""
+                <div class="availability">
+                  <button class="button secondary" type="button" id="check-availability" name="check-availability" aria-label="Check availability" data-trip="NAEROY">Check availability</button>
+                  <p id="availability-result" role="status"></p>
+                </div>
+                <script type="module" src="{{availabilityScript}}"></script>
+                """;
         return $$"""
             <section class="hero">
               <p class="eyebrow">Daily sailings, May to September</p>
               <h1>Quiet water, steep walls, early light.</h1>
               <p class="lede">Three small-boat trips on the fjords of western Norway, skippered by people who grew up on them. Twelve passengers or fewer to a booking, blankets on board.</p>
               <a class="button" href="#trips">See the trips</a>
+              {{availability}}
             </section>
             <section id="trips" class="trips" aria-label="Trips">
             {{cards}}

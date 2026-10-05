@@ -14,9 +14,9 @@ public static class Html
     public static string E(string? value) => Encoder.Encode(value ?? "");
 
     public static IResult Page(string title, string body, int statusCode = StatusCodes.Status200OK) =>
-        Results.Content(Layout(title, body), ContentType, Encoding.UTF8, statusCode);
+        new PageResult(title, body, statusCode);
 
-    public static string Layout(string title, string body) => $$"""
+    public static string Layout(string title, string body, SiteScripts scripts) => $$"""
         <!doctype html>
         <html lang="en">
         <head>
@@ -25,6 +25,7 @@ public static class Html
           <title>{{E(title)}} · Fjord Bookings</title>
           <link rel="stylesheet" href="/site.css">
           <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+          {{scripts.BrowserTag()}}
         </head>
         <body>
           <header class="masthead">
@@ -40,8 +41,31 @@ public static class Html
           <footer class="footer">
             <p>Fjord Bookings · Small boats on the western fjords</p>
             <p class="note">A demonstration site. No bookings are taken and nothing is charged.</p>
+            <form id="newsletter" class="newsletter" novalidate>
+              <p class="newsletter-title">Keep me posted</p>
+              <div class="topics" role="group" aria-label="What to hear about">
+                <button type="button" name="topic-news" data-topic-choice="fjord news" aria-label="Fjord news" aria-pressed="true">Fjord news</button>
+                <button type="button" name="topic-offers" data-topic-choice="seasonal offers" aria-label="Seasonal offers" aria-pressed="false">Seasonal offers</button>
+              </div>
+              <div class="subscribe">
+                <input name="email" type="email" aria-label="Email address for the newsletter" placeholder="you@example.com" autocomplete="email">
+                <button class="button" type="submit" name="subscribe" aria-label="Subscribe to the newsletter">Keep me posted</button>
+              </div>
+              <p id="newsletter-message" class="fine" role="status"></p>
+            </form>
           </footer>
+          <script type="module" src="{{scripts.Module("newsletter")}}"></script>
         </body>
         </html>
         """;
+}
+
+/// <summary>An HTML page inside the layout, whose scripts come from the request's services.</summary>
+public sealed class PageResult(string title, string body, int statusCode) : IResult
+{
+    public Task ExecuteAsync(HttpContext httpContext)
+    {
+        var scripts = httpContext.RequestServices.GetRequiredService<SiteScripts>();
+        return Results.Content(Html.Layout(title, body, scripts), Html.ContentType, Encoding.UTF8, statusCode).ExecuteAsync(httpContext);
+    }
 }

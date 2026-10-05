@@ -25,6 +25,12 @@ public sealed class SiteStackProps : StackProps
     /// </summary>
     public string? CertificateArn { get; init; }
 
+    /// <summary>
+    /// ourfault's public browser key for the site's pages, from the GitHub environment variable <c>OURFAULT_BROWSER_KEY</c>.
+    /// Without it the pages carry no browser script.
+    /// </summary>
+    public string? BrowserKey { get; init; }
+
     /// <summary>The commit deployed, reported as the service's <c>service.version</c>.</summary>
     public required string CommitSha { get; init; }
 }
@@ -80,6 +86,10 @@ public sealed class SiteStack : Stack
                 ["OURFAULT_TOKEN_SECRET_ID"] = TokenSecretName,
             },
         });
+        if (props.BrowserKey is { } browserKey)
+        {
+            function.AddEnvironment("OURFAULT_BROWSER_KEY", browserKey);
+        }
         _ = token.GrantRead(function);
 
         // SnapStart applies to published versions only, so the API invokes an alias on the current one.

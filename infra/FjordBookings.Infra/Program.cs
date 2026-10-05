@@ -10,6 +10,7 @@ _ = new SiteStack(app, SiteStack.Name, new SiteStackProps
     Env = new Amazon.CDK.Environment { Account = SiteStack.AccountId, Region = SiteStack.RegionName },
     AssetPath = Context("assetPath") ?? "../out/fjord-bookings",
     CertificateArn = Context("certificateArn"),
+    BrowserKey = Context("browserKey"),
     CommitSha = Context("commitSha") ?? "unknown",
 });
 

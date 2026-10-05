@@ -29,6 +29,7 @@ builder.Services.AddOpenTelemetry()
 builder.Logging.AddFilter<OpenTelemetryLoggerProvider>("*", LogLevel.Warning);
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<SiteScripts>();
 builder.Services.AddSingleton<TripCatalogue>();
 builder.Services.AddSingleton<SeasonalRates>();
 builder.Services.AddSingleton<PricingService>();
@@ -45,7 +46,17 @@ if (LambdaTelemetryFlush.InLambda(app.Configuration))
     app.UseMiddleware<LambdaTelemetryFlush>();
 }
 app.UseExceptionHandler();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    // The modules' names carry their content hash, so a browser may keep one for as long as it likes.
+    OnPrepareResponse = context =>
+    {
+        if (context.Context.Request.Path.StartsWithSegments("/js"))
+        {
+            context.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        }
+    },
+});
 app.MapSite();
 
 app.Run();

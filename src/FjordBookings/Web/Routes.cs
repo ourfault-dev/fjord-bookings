@@ -7,7 +7,8 @@ public static class Routes
 {
     public static WebApplication MapSite(this WebApplication app)
     {
-        app.MapGet("/", (TripCatalogue trips) => Html.Page("Boat trips on the western fjords", Pages.Home(trips)));
+        app.MapGet("/", (TripCatalogue trips, SiteScripts scripts, string? variant) =>
+            Html.Page("Boat trips on the western fjords", Pages.Home(trips, variant == "js2" ? scripts.Module("availability") : null)));
 
         app.MapGet("/book", (TripCatalogue trips, TimeProvider time, string? trip, int? variant) =>
             Html.Page("Book a trip", Pages.Book(trips, new BookingForm { Trip = trip ?? "" }, variant, Today(time))));
