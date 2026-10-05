@@ -68,19 +68,15 @@ public sealed class SiteStack : Stack
                 Retention = RetentionDays.TWO_WEEKS,
                 RemovalPolicy = RemovalPolicy.DESTROY,
             }),
-            // The ourfault setup's environment; the app reads the token from the secret at start-up and sets the
-            // three header variables from it.
+            // The ourfault setup's environment: the base OTLP variables, which the .NET exporter reads (it ignores the
+            // per-signal ones); the app reads the token from the secret at start-up and sets the headers variable from it.
             Environment = new Dictionary<string, string>
             {
                 ["GIT_SHA"] = props.CommitSha,
                 ["OTEL_SERVICE_NAME"] = ServiceName,
                 ["OTEL_RESOURCE_ATTRIBUTES"] = $"service.version={props.CommitSha}",
-                ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = $"{Ingest}/v1/logs",
-                ["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] = "http/protobuf",
-                ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = $"{Ingest}/v1/traces",
-                ["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"] = "http/protobuf",
-                ["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = $"{Ingest}/v1/metrics",
-                ["OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"] = "http/protobuf",
+                ["OTEL_EXPORTER_OTLP_ENDPOINT"] = Ingest,
+                ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf",
                 ["OURFAULT_TOKEN_SECRET_ID"] = TokenSecretName,
             },
         });

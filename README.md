@@ -17,15 +17,11 @@ The site sends its logs, traces and metrics to ourfault with the setup from ourf
 export OURFAULT_TOKEN=<your token>
 export OTEL_SERVICE_NAME=fjord-bookings
 export OTEL_RESOURCE_ATTRIBUTES=service.version=${GIT_SHA}
-export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=https://ingest.ourfault.dev/v1/logs
-export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf
-export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://ingest.ourfault.dev/v1/traces
-export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
-export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://ingest.ourfault.dev/v1/metrics
-export OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.ourfault.dev
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 ```
 
-At start-up the app turns `OURFAULT_TOKEN` into the three `OTEL_EXPORTER_OTLP_*_HEADERS` variables (`Authorization=Bearer%20<token>`). In Lambda the token comes from the Secrets Manager secret named by `OURFAULT_TOKEN_SECRET_ID`, and the requests' telemetry is flushed before each response leaves, since Lambda freezes the process between invocations.
+At start-up the app turns `OURFAULT_TOKEN` into `OTEL_EXPORTER_OTLP_HEADERS` (`Authorization=Bearer%20<token>`). The .NET exporter reads the base OTLP variables and appends `/v1/logs`, `/v1/traces` and `/v1/metrics` itself; it does not apply the per-signal ones. In Lambda the token comes from the Secrets Manager secret named by `OURFAULT_TOKEN_SECRET_ID`, and the requests' telemetry is flushed before each response leaves, since Lambda freezes the process between invocations.
 
 ## Demonstrating
 

@@ -111,19 +111,18 @@ public sealed class OurfaultEnvironmentTests
 
         Assert.Equal("demo/ourfault-token", asked);
         Assert.Equal("ob_fromsecret", _environment["OURFAULT_TOKEN"]);
-        Assert.Equal("Authorization=Bearer%20ob_fromsecret", _environment["OTEL_EXPORTER_OTLP_LOGS_HEADERS"]);
+        Assert.Equal("Authorization=Bearer%20ob_fromsecret", _environment["OTEL_EXPORTER_OTLP_HEADERS"]);
     }
 
     [Fact]
     public async Task A_header_already_set_is_kept()
     {
         _environment["OURFAULT_TOKEN"] = "ob_abc";
-        _environment["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = "Authorization=Bearer%20other";
+        _environment["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=Bearer%20other";
 
         await Apply();
 
-        Assert.Equal("Authorization=Bearer%20other", _environment["OTEL_EXPORTER_OTLP_TRACES_HEADERS"]);
-        Assert.Equal("Authorization=Bearer%20ob_abc", _environment["OTEL_EXPORTER_OTLP_METRICS_HEADERS"]);
+        Assert.Equal("Authorization=Bearer%20other", _environment["OTEL_EXPORTER_OTLP_HEADERS"]);
     }
 
     [Fact]
